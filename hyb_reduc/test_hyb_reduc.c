@@ -4,7 +4,7 @@
 #include <mpi.h>
 #include <pthread.h>
 
-#include "mpi_decomp.h"
+#include "../mpi_decomp/mpi_decomp.h"
 #include "hyb_reduc.h"
 
 #define NUM_WORKERS 4
@@ -37,21 +37,21 @@ void *run_test(void *ptr_args_test)
 
     for(i = 0 ; i < 2 ; i++)
     {
-	err = (out[i] - chck_val[i])/chck_val[i];
+        err = (out[i] - chck_val[i])/chck_val[i];
 
-	if (fabs(err) < 1.e-14)
-	{
-	    if (glob_rank == 0)
-	    {
-		printf("Val reduite %d correcte\n", i);
-	    }
-	}
-	else
-	{
-	    printf("P%d.T%d : out[%d] != chck_val[%d] : %.14e != %.14e, err = %.6e\n",
-		    args_test->mpi_decomp->mpi_rank, args_test->trank,
-		    i, i, out[i], chck_val[i], err);
-	}
+        if (fabs(err) < 1.e-14)
+        {
+            if (glob_rank == 0)
+            {
+                printf("Val reduite %d correcte\n", i);
+            }
+        }
+        else
+        {
+            printf("P%d.T%d : out[%d] != chck_val[%d] : %.14e != %.14e, err = %.6e\n",
+                    args_test->mpi_decomp->mpi_rank, args_test->trank,
+                    i, i, out[i], chck_val[i], err);
+        }
     }
 
     return NULL;
@@ -71,11 +71,11 @@ int main(int argc, char **argv) {
 
     if (mpi_thread_provided != MPI_THREAD_SERIALIZED)
     {
-	printf("Niveau demande' : MPI_THREAD_SERIALIZED, niveau fourni : %d\n", mpi_thread_provided);
+        printf("Niveau demande' : MPI_THREAD_SERIALIZED, niveau fourni : %d\n", mpi_thread_provided);
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	MPI_Finalize();
-	return 1;
+        MPI_Barrier(MPI_COMM_WORLD);
+        MPI_Finalize();
+        return 1;
     }
 
     mpi_decomp_init(10000, &mpi_decomp);
@@ -85,16 +85,16 @@ int main(int argc, char **argv) {
 
     for(t = 0 ; t < NUM_WORKERS ; t++)
     {
-	args_test[t].trank = t;
-	args_test[t].mpi_decomp = &mpi_decomp;
-	args_test[t].sh_red     = &sh_red;
+        args_test[t].trank = t;
+        args_test[t].mpi_decomp = &mpi_decomp;
+        args_test[t].sh_red     = &sh_red;
 
-	pthread_create(pth_test+t, NULL, run_test, args_test+t);
+        pthread_create(pth_test+t, NULL, run_test, args_test+t);
     }
 
     for(t = 0 ; t < NUM_WORKERS ; t++)
     {
-	pthread_join(pth_test[t], NULL);
+        pthread_join(pth_test[t], NULL);
     }
 
     shared_reduc_destroy(&sh_red);

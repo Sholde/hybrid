@@ -2,14 +2,20 @@
 #define __HYB_REDUC_H
 
 #include <pthread.h>
+#include <semaphore.h>
 
 struct shared_reduc_s
 {
+  /* A COMPLETER */
 
-    /* A COMPLETER */
+  int nvals;        /* taille du tableau red_val */
+  double *red_val;  /* les valeurs a reduire */
 
-    int nvals;        /* taille du tableau red_val */
-    double *red_val;  /* les valeurs a reduire */
+  pthread_mutex_t *red_mut;
+  pthread_barrier_t *red_bar;
+  sem_t *sem;
+
+  int terminate;
 };
 typedef struct shared_reduc_s shared_reduc_t;
 
