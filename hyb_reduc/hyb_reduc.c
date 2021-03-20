@@ -24,6 +24,7 @@ void shared_reduc_init(shared_reduc_t *sh_red, int nthreads, int nvals)
   sem_init(sh_red->sem, 0, 0);
 
   sh_red->terminate = 0;
+  sh_red->set_master = 0;
 }
 
 void shared_reduc_destroy(shared_reduc_t *sh_red)
@@ -61,9 +62,6 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
   }
   pthread_mutex_unlock(sh_red->red_mut);
 
-  // Waiting result from thread intra-processus
-  pthread_barrier_wait(sh_red->red_bar);
-
   // Ensure that output array are null
   for (int i = 0; i < sh_red->nvals; i++)
     {
@@ -73,11 +71,26 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
   /*****************/
   /* MPI Reduction */
   /*****************/
+
+  int is_master = 0;
+
+  pthread_mutex_lock(sh_red->red_mut);
+  {
+    if (sh_red->set_master == 0)
+      {
+        is_master = 1;
+        sh_red->set_master = 1;
+      }
+  }
+  pthread_mutex_unlock(sh_red->red_mut);
+
+  // Waiting all thread for avoid mutex on all if and waiting all thread reduction
+  pthread_barrier_wait(sh_red->red_bar);
   
-  if (sh_red->terminate == 0) /* master thread */
+  if (is_master == 1) /* master thread */
     {
       // Recup MPI data
-      int root = 0;
+      int root = 0; // select process 0 to be root
         
       int rank = 0;
       MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -146,9 +159,5 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
     {
       sem_post(sh_red->sem);
     }
-
-  // Waiting all thread
-  pthread_barrier_wait(sh_red->red_bar);
 }
-
 

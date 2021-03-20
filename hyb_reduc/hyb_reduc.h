@@ -15,6 +15,7 @@ struct shared_reduc_s
   pthread_barrier_t *red_bar; /* barrier */
   sem_t *sem;                 /* semaphore */
 
+  int set_master;             /* indicate if master thread was choose */
   int terminate;              /* indicate the number of threads that finish their work */
   int nthreads;               /* indicate the number of threads */
 };
