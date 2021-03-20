@@ -46,7 +46,10 @@ void shared_reduc_destroy(shared_reduc_t *sh_red)
  */
 void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
 {
-  /* A COMPLETER */
+  /********************/
+  /* Thread Reduction */
+  /********************/
+
   pthread_mutex_lock(sh_red->red_mut);
   {
     // Writting
@@ -60,27 +63,29 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
   // Waiting result from thread intra-processus
   pthread_barrier_wait(sh_red->red_bar);
 
-  // Updating output array with intra-procesuus reduction
+  // Ensure that output array are null
   for (int i = 0; i < sh_red->nvals; i++)
     {
-      out[i] = sh_red->red_val[i];
+      out[i] = 0;
     }
 
-  // MPI Communication
-  if (!sh_red->terminate)
+  /*****************/
+  /* MPI Reduction */
+  /*****************/
+  
+  if (!sh_red->terminate) /* master thread */
     {
+      // Recup MPI data
+      int root = 0;
+        
       int rank = 0;
       MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
       int size = 0;
       MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-      int root = 0;
-
-      double *buff = NULL;
-
       // Allocate the buffer
-      buff = malloc(sizeof(double) * size);
+      double *buff = malloc(sizeof(double) * size);
 
       // Recup in root processus the reduction of all others
       for (int i = 0; i < sh_red->nvals; i++)
@@ -89,7 +94,6 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
 
           if (rank == root)
             {
-              printf("here\n");
               for (int j = 0; j < size; j++)
                 {
                   out[i] += buff[j];
@@ -103,19 +107,41 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
       // Broadcast to all processus the result
       MPI_Bcast(out, sh_red->nvals, MPI_DOUBLE, root, MPI_COMM_WORLD);
 
+      /*****************/
+      /* Thread Update */
+      /*****************/
+
+      // Don't need mutex because other thread are waiting (cf: else close)
+      for (int i = 0; i < sh_red->nvals; i++)
+        {
+          sh_red->red_val[i] = out[i];
+        }
+
+      // Finish master thread
       sh_red->terminate = 1;
       sem_post(sh_red->sem);
     }
   else
     {
-      
+      // If not master thread, waiting master thread
       sem_wait(sh_red->sem);
+
+      /*****************/
+      /* Thread Update */
+      /*****************/
+
+      // Don't need mutex because all thread waiting or finish
       for (int i = 0; i < sh_red->nvals; i++)
         {
-
+          out[i] = sh_red->red_val[i];
         }
+
+      // Release semaphore
       sem_post(sh_red->sem);
     }
+
+  // Waiting all thread
+  pthread_barrier_wait(sh_red->red_bar);
 }
 
 
