@@ -11,11 +11,12 @@ struct shared_reduc_s
   int nvals;        /* taille du tableau red_val */
   double *red_val;  /* les valeurs a reduire */
 
-  pthread_mutex_t *red_mut;
-  pthread_barrier_t *red_bar;
-  sem_t *sem;
+  pthread_mutex_t *red_mut;   /* mutext */
+  pthread_barrier_t *red_bar; /* barrier */
+  sem_t *sem;                 /* semaphore */
 
-  int terminate;
+  int terminate;              /* indicate the number of threads that finish their work */
+  int nthreads;               /* indicate the number of threads */
 };
 typedef struct shared_reduc_s shared_reduc_t;
 

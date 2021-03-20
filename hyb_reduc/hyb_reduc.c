@@ -8,6 +8,7 @@ void shared_reduc_init(shared_reduc_t *sh_red, int nthreads, int nvals)
 {
   /* A COMPLETER */
   sh_red->nvals = nvals;
+  sh_red->nthreads = nthreads;
 
   sh_red->red_val = malloc(sizeof(double) * nvals);
   memset(sh_red->red_val, 0, sizeof(double) * nvals);
@@ -73,7 +74,7 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
   /* MPI Reduction */
   /*****************/
   
-  if (!sh_red->terminate) /* master thread */
+  if (sh_red->terminate == 0) /* master thread */
     {
       // Recup MPI data
       int root = 0;
@@ -117,9 +118,7 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
           sh_red->red_val[i] = out[i];
         }
 
-      // Finish master thread
-      sh_red->terminate = 1;
-      sem_post(sh_red->sem);
+      // Finish work
     }
   else
     {
@@ -136,7 +135,15 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
           out[i] = sh_red->red_val[i];
         }
 
-      // Release semaphore
+      // Finish work
+    }
+
+  // Finish work
+  sh_red->terminate += 1;
+
+  // Release semaphore only if we are not the last thread to finish work
+  if (sh_red->terminate != sh_red->nthreads)
+    {
       sem_post(sh_red->sem);
     }
 
