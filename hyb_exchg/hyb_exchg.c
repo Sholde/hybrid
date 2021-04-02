@@ -53,21 +53,42 @@ void hyb_exchg(
       /****************/
 
       int head = 0;
-      int tail = mpi_decomp->mpi_nproc;
+      int tail = mpi_decomp->mpi_nproc - 1;
 
-      if (mpi_decomp->mpi_rank == head)
+      if (mpi_decomp->mpi_rank == head) /* Head process */
         {
-      
-        }
-      else if (mpi_decomp->mpi_rank == tail)
-        {
+          // Send to right
+          MPI_Send(&(sh_arr[mpi_decomp->mpi_ifin - 1]), 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
           
+          // Recv from right
+          MPI_Recv(&(sh_ex->right), 1, MPI_INT, 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
-      else
+      else if (mpi_decomp->mpi_rank == tail) /* Tail process */
         {
+          // Recv from left
+          MPI_Recv(&(sh_ex->left), 1, MPI_INT, mpi_decomp->mpi_rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+          // Send to left
+          MPI_Send(&(sh_arr[mpi_decomp->mpi_ideb]), 1, MPI_INT, mpi_decomp->mpi_rank - 1, 0, MPI_COMM_WORLD);
+        }
+      else /* Middle process */
+        {
+          // Recv from left
+          MPI_Recv(&(sh_ex->left), 1, MPI_INT, mpi_decomp->mpi_rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+          // Send to right
+          MPI_Send(&(sh_arr[mpi_decomp->mpi_ifin - 1]), 1, MPI_INT, mpi_decomp->mpi_rank + 1, 0, MPI_COMM_WORLD);
+
+          // Recv from right
+          MPI_Recv(&(sh_ex->right), 1, MPI_INT, mpi_decomp->mpi_rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+          
+          // Send to left
+          MPI_Send(&(sh_arr[mpi_decomp->mpi_ideb]), 1, MPI_INT, mpi_decomp->mpi_rank - 1, 0, MPI_COMM_WORLD);
         }
 
+      *val_to_rcv_left = sh_ex->left;
+      *val_to_rcv_right = sh_ex->right;
+      
       // Free other thread of sem_wait
       for (int i = 1; i < sh_ex->nthreads; i++)
         {
