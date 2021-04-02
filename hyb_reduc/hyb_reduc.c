@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
 void shared_reduc_init(shared_reduc_t *sh_red, int nthreads, int nvals)
 {
   /* A COMPLETER */

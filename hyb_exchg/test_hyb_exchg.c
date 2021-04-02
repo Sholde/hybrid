@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "hyb_exchg.h"
+#include "../mpi_decomp/mpi_decomp.h"
 
 #define NUM_WORKERS 4
 
