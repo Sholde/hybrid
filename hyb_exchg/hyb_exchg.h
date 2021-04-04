@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#include "../mpi_decomp/mpi_decomp.h"
+#include "mpi_decomp.h"
 
 struct shared_exchg_s
 {

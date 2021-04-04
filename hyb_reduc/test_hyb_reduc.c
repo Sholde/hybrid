@@ -4,7 +4,7 @@
 #include <mpi.h>
 #include <pthread.h>
 
-#include "../mpi_decomp/mpi_decomp.h"
+#include "mpi_decomp.h"
 #include "hyb_reduc.h"
 
 #define NUM_WORKERS 4
