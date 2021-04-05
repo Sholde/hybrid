@@ -19,9 +19,8 @@ struct vector_s
 };
 typedef struct vector_s vector_t;
 
-void vector_alloc(mpi_decomp_t *mpi_info, vector_t *vec)
+void vector_alloc(int N, vector_t *vec)
 {
-  int N = mpi_info->mpi_nloc;
   vec->N = N;
   vec->elt = (double*)malloc(N*sizeof(double));
 }
@@ -372,7 +371,7 @@ int main(int argc, char **argv)
     /* Allocation et construction du systeme lineaire
      */
     linear_system_alloc_and_init(&mpi_info, &A, &vb);
-    vector_alloc(&mpi_info, &vx); /* vx est l'inconnue */
+    vector_alloc(mpi_info.mpi_nloc, &vx); /* vx est l'inconnue */
 
 
 
