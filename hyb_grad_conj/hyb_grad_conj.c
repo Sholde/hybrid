@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <libgen.h>
-
 #include <mpi.h>
+
+#include "mpi_decomp.h"
+#include "hyb_reduc.h"
 
 #define NUM_WORKERS 4
 
@@ -17,8 +19,9 @@ struct vector_s
 };
 typedef struct vector_s vector_t;
 
-void vector_alloc(int N, vector_t *vec)
+void vector_alloc(mpi_decomp_t *mpi_info, vector_t *vec)
 {
+  int N = mpi_info->mpi_nloc;
   vec->N = N;
   vec->elt = (double*)malloc(N*sizeof(double));
 }
@@ -151,8 +154,9 @@ struct matrix3b_s
 };
 typedef struct matrix3b_s matrix3b_t;
 
-void linear_system_alloc_and_init(int N, matrix3b_t *A, vector_t *vb)
+void linear_system_alloc_and_init(mpi_decomp_t *mpi_info, matrix3b_t *A, vector_t *vb)
 {
+  int N = mpi_info->mpi_nloc;
   assert(N > 2);
   int i;
 
@@ -169,7 +173,7 @@ void linear_system_alloc_and_init(int N, matrix3b_t *A, vector_t *vb)
   /* Remplissage */
   double coeff = 0.01;
 
-  for(i = 0 ; i < N ; i++)
+  for(i = 0; i < N; i++)
     {
       A->bnd[0][i] = -coeff;
       A->bnd[1][i] = 1. + 2*coeff;
@@ -177,11 +181,20 @@ void linear_system_alloc_and_init(int N, matrix3b_t *A, vector_t *vb)
 
       vb->elt[i] = 1.;
     }
-  A->bnd[0][0] = 0.;
-  vb->elt[0] = 1. + coeff;
 
-  A->bnd[2][N-1] = 0.;
-  vb->elt[N-1] = 1. + coeff;
+  // First MPI process have the first line of matrix
+  if (mpi_info->mpi_rank == 0)
+    {
+      A->bnd[0][0] = 0.;
+      vb->elt[0] = 1. + coeff;
+    }
+
+  // Last MPI process have the last line of matrix
+  if (mpi_info->mpi_rank == mpi_info->mpi_nproc - 1)
+    {
+      A->bnd[2][N-1] = 0.;
+      vb->elt[N-1] = 1. + coeff;
+    }
 }
 
 void linear_system_free(matrix3b_t *A, vector_t *vb)
@@ -320,61 +333,68 @@ int main(int argc, char **argv)
   // MPI
   int mpi_thread_provided;
   int rank, size;
-
+  mpi_decomp_t mpi_info;
+  shared_reduc_t sh_red;
+  
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &mpi_thread_provided);
-
-  // Check if MPI_THREAD_SERIALIZED is set
-  if (mpi_thread_provided != MPI_THREAD_SERIALIZED)
-    {
-        printf("Niveau demande' : MPI_THREAD_SERIALIZED, niveau fourni : %d\n", mpi_thread_provided);
+  {
+    // Check if MPI_THREAD_SERIALIZED is set
+    if (mpi_thread_provided != MPI_THREAD_SERIALIZED)
+      {
+        printf("Niveau demande' : MPI_THREAD_SERIALIZED, niveau fourni : %d\n",\
+               mpi_thread_provided);
 
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Finalize();
         return 1;
-    }
+      }
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  if (rank == 0)
-    {
-      // Check argument
-      if (argc != 2)
-        {
-          printf("Usage : %s <N>\n", basename(argv[0]));
-          printf("\t<N>    : dimension de la matrice\n");
-          abort();
-        }
-    }
-  N = atoi(argv[1]);
+    if (rank == 0)
+      {
+        // Check argument
+        if (argc != 2)
+          {
+            printf("Usage : %s <N>\n", basename(argv[0]));
+            printf("\t<N>    : dimension de la matrice\n");
+            abort();
+          }
+      }
+    
+    N = atoi(argv[1]);
 
+    mpi_decomp_init(N, &mpi_info);
 
-  /* Allocation et construction du systeme lineaire
-   */
-  linear_system_alloc_and_init(N, &A, &vb);
-  vector_alloc(N, &vx); /* vx est l'inconnue */
+    shared_reduc_init(&sh_red, NUM_WORKERS, 2); /* 2 = deux valeurs a reduire */
 
-
-
-  /* Resolution du systeme lineaire 
-   *  A.vx = vb
-   * par application de l'algorithme de Gradient Conjugue'
-   */
-  gradient_conjugue(&A, &vb, &vx);
-
-
-  /* Verification du resultat
-   *  A.vx "doit etre proche" de vb
-   */
-  verif_sol(&A, &vb, &vx);
+    /* Allocation et construction du systeme lineaire
+     */
+    linear_system_alloc_and_init(&mpi_info, &A, &vb);
+    vector_alloc(&mpi_info, &vx); /* vx est l'inconnue */
 
 
 
-  /* Liberation memoire
-   */
-  linear_system_free(&A, &vb);
-  vector_free(&vx);
+    /* Resolution du systeme lineaire 
+     *  A.vx = vb
+     * par application de l'algorithme de Gradient Conjugue'
+     */
+    gradient_conjugue(&A, &vb, &vx);
 
+
+    /* Verification du resultat
+     *  A.vx "doit etre proche" de vb
+     */
+    verif_sol(&A, &vb, &vx);
+
+
+
+    /* Liberation memoire
+     */
+    linear_system_free(&A, &vb);
+    vector_free(&vx);
+  }
   MPI_Finalize();
 
   return 0;
