@@ -8,8 +8,6 @@
 #include "thr_decomp.h"
 #include "hyb_reduc.h"
 
-#define NUM_WORKERS 4
-
 /*
  * Vecteur
  */
@@ -239,12 +237,29 @@ void prod_mat_vec(vector_t *vy, matrix3b_t *A, vector_t *vx)
     }
 }
 
+#define NUM_WORKERS 4
+
+typedef struct args_s
+{
+  mpi_decomp_t *mpi_info;
+  thr_decomp_t *thr_info;
+  matrix3b_t *A;
+  vector_t *vb;
+  vector_t *vx;
+} args_t;
+
 /*
  * Algorithme du Gradient Conjugue'
  *   " Resoud le systeme A.vx = vb "
  */
-void gradient_conjugue(matrix3b_t *A, vector_t *vb, vector_t *vx)
+void *gradient_conjugue(void *args_void)
 {
+  // Recup input
+  args_t *args = (args_t *)args_void;
+  matrix3b_t *A = args->A;
+  vector_t *vx = args->vx;
+  vector_t *vb = args->vb;
+  
   vector_t vg, vh, vw;
   double sn, sn1, sr, sg, seps;
   int k, N;
@@ -336,8 +351,12 @@ int main(int argc, char **argv)
 
   // Hybrid
   mpi_decomp_t mpi_info;
+  thr_decomp_t thr_info[NUM_WORKERS];
   shared_reduc_t sh_red;
-  thr_decomp_t thr_info;
+
+  // Thread
+  args_t args[NUM_WORKERS];
+  pthread_t pth[NUM_WORKERS];
   
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &mpi_thread_provided);
   {
@@ -381,13 +400,25 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < NUM_WORKERS; i++)
       {
-        thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &thr_info);
+        thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &(thr_info[i]));
+
+        args[i].mpi_info = &mpi_info;
+        args[i].thr_info = &(thr_info[i]);
+        args[i].A = &A;
+        args[i].vx = &vx;
+        args[i].vb = &vb;
 
         /* Resolution du systeme lineaire 
          *  A.vx = vb
          * par application de l'algorithme de Gradient Conjugue'
          */
-        gradient_conjugue(&A, &vb, &vx);
+        pthread_create(pth + i, NULL, gradient_conjugue, &(args[i]));
+      }
+
+    
+    for (int i = 0; i < NUM_WORKERS; i++)
+      {
+        pthread_join(pth[i], NULL);
       }
 
 
