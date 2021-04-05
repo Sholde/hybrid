@@ -5,6 +5,7 @@
 #include <mpi.h>
 
 #include "mpi_decomp.h"
+#include "thr_decomp.h"
 #include "hyb_reduc.h"
 
 #define NUM_WORKERS 4
@@ -332,8 +333,11 @@ int main(int argc, char **argv)
   // MPI
   int mpi_thread_provided;
   int rank, size;
+
+  // Hybrid
   mpi_decomp_t mpi_info;
   shared_reduc_t sh_red;
+  thr_decomp_t thr_info;
   
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &mpi_thread_provided);
   {
@@ -366,6 +370,7 @@ int main(int argc, char **argv)
 
     mpi_decomp_init(N, &mpi_info);
 
+
     shared_reduc_init(&sh_red, NUM_WORKERS, 2); /* 2 = deux valeurs a reduire */
 
     /* Allocation et construction du systeme lineaire
@@ -374,12 +379,16 @@ int main(int argc, char **argv)
     vector_alloc(mpi_info.mpi_nloc, &vx); /* vx est l'inconnue */
 
 
+    for (int i = 0; i < NUM_WORKERS; i++)
+      {
+        thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &thr_info);
 
-    /* Resolution du systeme lineaire 
-     *  A.vx = vb
-     * par application de l'algorithme de Gradient Conjugue'
-     */
-    gradient_conjugue(&A, &vb, &vx);
+        /* Resolution du systeme lineaire 
+         *  A.vx = vb
+         * par application de l'algorithme de Gradient Conjugue'
+         */
+        gradient_conjugue(&A, &vb, &vx);
+      }
 
 
     /* Verification du resultat
