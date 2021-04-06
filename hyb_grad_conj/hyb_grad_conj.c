@@ -33,11 +33,11 @@ void vector_free(vector_t *vec)
  * Initialise le vecteur à 0
  *   " vec = 0 "
  */
-void vector_init_0(vector_t *vec)
+void vector_init_0(thr_decomp_t *thr_info, vector_t *vec)
 {
   int i;
 
-  for(i = 0 ; i < vec->N ; i++)
+  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
     {
       vec->elt[i] = 0.;
     }
@@ -47,11 +47,11 @@ void vector_init_0(vector_t *vec)
  * Multiplie tous les elements du vecteur par un scalaire
  *  " vec *= s "
  */
-void vector_mul_scal(vector_t *vec, double s)
+void vector_mul_scal(thr_decomp_t *thr_info, vector_t *vec, double s)
 {
   int i;
 
-  for(i = 0 ; i < vec->N ; i++)
+  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
     {
       vec->elt[i] *= s;
     }
@@ -61,13 +61,13 @@ void vector_mul_scal(vector_t *vec, double s)
  * Affectation d'un vecteur par un autre multiplie' par un scalaire
  *  "  vec_out = s*vec_in  "
  */
-void vector_affect_mul_scal(vector_t *vec_out, double s, vector_t *vec_in)
+void vector_affect_mul_scal(thr_decomp_t *thr_info, vector_t *vec_out, double s, vector_t *vec_in)
 {
   int i;
 
   assert(vec_out->N == vec_in->N);
 
-  for(i = 0 ; i < vec_in->N ; i++)
+  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
     {
       vec_out->elt[i] = s*vec_in->elt[i];
     }
@@ -77,14 +77,14 @@ void vector_affect_mul_scal(vector_t *vec_out, double s, vector_t *vec_in)
  * Calcule la norme L2 au carre' du vecteur
  *   "  (|| vec ||_2)²  "
  */
-double vector_norm2(vector_t *vec)
+double vector_norm2(thr_decomp_t *thr_info, vector_t *vec)
 {
   double norm2;
   int i;
 
   norm2 = 0.;
 
-  for(i = 0 ; i < vec->N ; i++)
+  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
     {
       norm2 += vec->elt[i]*vec->elt[i];
     }
@@ -96,13 +96,13 @@ double vector_norm2(vector_t *vec)
  * Additione à un vecteur un autre vecteur multiplie' par un scalaire
  *  " vec_inout += s*vec_in  "
  */
-void vector_add_mul_scal(vector_t *vec_inout, double s, vector_t *vec_in)
+void vector_add_mul_scal(thr_decomp_t *thr_info, vector_t *vec_inout, double s, vector_t *vec_in)
 {
   int i;
 
   assert(vec_inout->N == vec_in->N);
 
-  for(i = 0 ; i < vec_in->N ; i++)
+  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
     {
       vec_inout->elt[i] += s*vec_in->elt[i];
     }
@@ -112,7 +112,7 @@ void vector_add_mul_scal(vector_t *vec_inout, double s, vector_t *vec_in)
  * Retourne le rapport de 2 produits scalaires
  *  "  (v1.w1) / (v2.w2)  "
  */
-double div_bi_prod_scal(vector_t *v1, vector_t *w1, vector_t *v2, vector_t *w2)
+double div_bi_prod_scal(thr_decomp_t *thr_info, vector_t *v1, vector_t *w1, vector_t *v2, vector_t *w2)
 {
   int i;
 
@@ -125,7 +125,7 @@ double div_bi_prod_scal(vector_t *v1, vector_t *w1, vector_t *v2, vector_t *w2)
   scal1 = 0.;
   scal2 = 0.;
 
-  for(i = 0 ; i < v1->N ; i++)
+  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
     {
       scal1 += v1->elt[i]*w1->elt[i];
       scal2 += v2->elt[i]*w2->elt[i];
@@ -208,7 +208,7 @@ void linear_system_free(matrix3b_t *A, vector_t *vb)
  * Produit Matrice-Vecteur
  *  " vy = A.vx  "
  */
-void prod_mat_vec(vector_t *vy, matrix3b_t *A, vector_t *vx)
+void prod_mat_vec(thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t *vx)
 {
   assert(A->N == vx->N);
   assert(vy->N == vx->N);
@@ -256,6 +256,7 @@ void *gradient_conjugue(void *args_void)
 {
   // Recup input
   args_t *args = (args_t *)args_void;
+  thr_decomp_t *thr_info = args->thr_info;
   matrix3b_t *A = args->A;
   vector_t *vx = args->vx;
   vector_t *vb = args->vb;
@@ -276,31 +277,31 @@ void *gradient_conjugue(void *args_void)
 
   /* Initialisation de l'algo */
 
-  vector_init_0(vx);
-  vector_affect_mul_scal(&vg, -1., vb);
-  vector_affect_mul_scal(&vh, -1., &vg);
-  sn = vector_norm2(&vg);
+  vector_init_0(thr_info, vx);
+  vector_affect_mul_scal(thr_info, &vg, -1., vb);
+  vector_affect_mul_scal(thr_info, &vh, -1., &vg);
+  sn = vector_norm2(thr_info, &vg);
 
   /* Phase iterative de l'algo */
 
   for(k = 0 ; k < N && sn > seps ; k++)
     {
       printf("Iteration %5d, err = %.4e\n", k, sn);
-      prod_mat_vec(&vw, A, &vh);
+      prod_mat_vec(thr_info, &vw, A, &vh);
 
-      sr = - div_bi_prod_scal(&vg, &vh, &vh, &vw);
+      sr = - div_bi_prod_scal(thr_info, &vg, &vh, &vh, &vw);
 
-      vector_add_mul_scal(vx, sr, &vh);
-      vector_add_mul_scal(&vg, sr, &vw);
+      vector_add_mul_scal(thr_info, vx, sr, &vh);
+      vector_add_mul_scal(thr_info, &vg, sr, &vw);
 
-      sn1 = vector_norm2(&vg);
+      sn1 = vector_norm2(thr_info, &vg);
 
       sg = sn1 / sn;
       sn = sn1;
 
-      vector_mul_scal(&vh, sg);
+      vector_mul_scal(thr_info, &vh, sg);
 
-      vector_add_mul_scal(&vh, -1., &vg);
+      vector_add_mul_scal(thr_info, &vh, -1., &vg);
     }
 
   vector_free(&vg);
@@ -311,8 +312,15 @@ void *gradient_conjugue(void *args_void)
 /* Verification du resultat
  *  A.vx "doit etre proche" de vb
  */
-void verif_sol(matrix3b_t *A, vector_t *vb, vector_t *vx)
+void *verif_sol(void *args_void)
 {
+  // Recup input
+  args_t *args = (args_t *)args_void;
+  thr_decomp_t *thr_info = args->thr_info;
+  matrix3b_t *A = args->A;
+  vector_t *vx = args->vx;
+  vector_t *vb = args->vb;
+
   vector_t vb_cal;
   double norm2;
 
@@ -321,9 +329,9 @@ void verif_sol(matrix3b_t *A, vector_t *vb, vector_t *vx)
 
   vector_alloc(A->N, &vb_cal);
 
-  prod_mat_vec(&vb_cal, A, vx); /* vb_cal = A.vx */
-  vector_add_mul_scal(&vb_cal, -1., vb); /* vb_cal = vb_cal - vb */
-  norm2 = vector_norm2(&vb_cal);
+  prod_mat_vec(thr_info, &vb_cal, A, vx); /* vb_cal = A.vx */
+  vector_add_mul_scal(thr_info, &vb_cal, -1., vb); /* vb_cal = vb_cal - vb */
+  norm2 = vector_norm2(thr_info, &vb_cal);
 
   if (norm2 < 1.e-12)
     {
@@ -398,6 +406,10 @@ int main(int argc, char **argv)
     vector_alloc(mpi_info.mpi_nloc, &vx); /* vx est l'inconnue */
 
 
+    /* Resolution du systeme lineaire 
+     *  A.vx = vb
+     * par application de l'algorithme de Gradient Conjugue'
+     */
     for (int i = 0; i < NUM_WORKERS; i++)
       {
         thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &(thr_info[i]));
@@ -408,10 +420,6 @@ int main(int argc, char **argv)
         args[i].vx = &vx;
         args[i].vb = &vb;
 
-        /* Resolution du systeme lineaire 
-         *  A.vx = vb
-         * par application de l'algorithme de Gradient Conjugue'
-         */
         pthread_create(pth + i, NULL, gradient_conjugue, &(args[i]));
       }
 
@@ -425,10 +433,26 @@ int main(int argc, char **argv)
     /* Verification du resultat
      *  A.vx "doit etre proche" de vb
      */
-    verif_sol(&A, &vb, &vx);
+    for (int i = 0; i < NUM_WORKERS; i++)
+      {
+        thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &(thr_info[i]));
 
+        args[i].mpi_info = &mpi_info;
+        args[i].thr_info = &(thr_info[i]);
+        args[i].A = &A;
+        args[i].vx = &vx;
+        args[i].vb = &vb;
 
+        pthread_create(pth + i, NULL, verif_sol, &(args[i]));
+      }
 
+    
+    for (int i = 0; i < NUM_WORKERS; i++)
+      {
+        pthread_join(pth[i], NULL);
+      }
+
+    
     /* Liberation memoire
      */
     linear_system_free(&A, &vb);
