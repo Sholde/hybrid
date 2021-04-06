@@ -215,6 +215,50 @@ void prod_mat_vec(thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t 
 
   int i;
 
+  if (mpi_info->mpi_rank == 0)
+    {
+      if (thr_info->thr_rank == 0)
+        {
+          /* cas i = 0 */
+          i = 0;
+          vy->elt[i] = 
+            A->bnd[1][i] * vx->elt[i] + 
+            A->bnd[2][i] * vx->elt[i+1];
+        }
+
+      /* Coeur de la matrice */
+      for(i = 1 ; i < A->N-1 ; i++)
+        {
+          vy->elt[i] = 
+            A->bnd[0][i] * vx->elt[i-1] + 
+            A->bnd[1][i] * vx->elt[i] + 
+            A->bnd[2][i] * vx->elt[i+1];
+        }
+    }
+  else if (mpi_info->mpi_rank == mpi_info->mpi_size - 1)
+    {
+      if (thr_info->thr_rank == thr_info->nthreads - 1)
+        {
+          /* cas i = N-1 */
+          i = A->N-1;
+          vy->elt[i] = 
+            A->bnd[0][i] * vx->elt[i-1] + 
+            A->bnd[1][i] * vx->elt[i];
+        }
+
+      /* Coeur de la matrice */
+      for(i = 1 ; i < A->N-1 ; i++)
+        {
+          vy->elt[i] = 
+            A->bnd[0][i] * vx->elt[i-1] + 
+            A->bnd[1][i] * vx->elt[i] + 
+            A->bnd[2][i] * vx->elt[i+1];
+        }
+    }
+  else
+    {
+      
+    }
   /* cas i = 0 */
   i = 0;
   vy->elt[i] = 
