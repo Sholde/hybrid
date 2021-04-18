@@ -7,6 +7,10 @@
 #include "mpi_decomp.h"
 #include "thr_decomp.h"
 #include "hyb_reduc.h"
+#include "hyb_exchg.h"
+
+
+#define NUM_WORKERS 4
 
 /*
  * Vecteur
@@ -18,6 +22,41 @@ struct vector_s
 };
 typedef struct vector_s vector_t;
 
+/*
+ *  Matrice creuse à 3 bandes
+ *  (pour la ligne i, seules les colonnes i-1, i et i+1 sont non nulles)
+ */
+struct matrix3b_s
+{
+  int N;          /* Matrice de dimension NxN */
+
+  /* Pour la ligne i, 
+   * A(i, i-1) = bnd[0][i]
+   * A(i, i)   = bnd[1][i]
+   * A(i, i+1) = bnd[2][i]
+   * Tous les elements sur les colonnes autres que i-1, i et i+1 sont nuls
+   */
+  double *bnd[3];
+};
+typedef struct matrix3b_s matrix3b_t;
+
+typedef struct hybrid_s
+{
+  // Parallel
+  mpi_decomp_t *mpi_info;
+  thr_decomp_t *thr_info;
+  shared_reduc_t *shr_reduc_info;
+  shared_exchg_t *shr_exchg_info;
+
+  // Data
+  matrix3b_t *A;
+  vector_t *vb;
+  vector_t *vx;
+} hybrid_t;
+
+/*
+ * Vecteur
+ */
 void vector_alloc(int N, vector_t *vec)
 {
   vec->N = N;
@@ -77,19 +116,23 @@ void vector_affect_mul_scal(thr_decomp_t *thr_info, vector_t *vec_out, double s,
  * Calcule la norme L2 au carre' du vecteur
  *   "  (|| vec ||_2)²  "
  */
-double vector_norm2(thr_decomp_t *thr_info, vector_t *vec)
+double vector_norm2(hybrid_t *hybrid, vector_t *vec)
 {
-  double norm2;
+  double norm2_local, norm2_global;
   int i;
 
-  norm2 = 0.;
+  norm2_global = norm2_local = 0.;
 
-  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
+  // local
+  for(i = hybrid->thr_info->thr_ideb; i < hybrid->thr_info->thr_ifin; i++)
     {
-      norm2 += vec->elt[i]*vec->elt[i];
+      norm2_local += vec->elt[i]*vec->elt[i];
     }
 
-  return norm2;
+  // hybrid reduction
+  hyb_reduc_sum(&norm2_local, &norm2_global, hybrid->shr_reduc_info);
+
+  return norm2_global;
 }
 
 /*
@@ -135,23 +178,8 @@ double div_bi_prod_scal(thr_decomp_t *thr_info, vector_t *v1, vector_t *w1, vect
 }
 
 /*
- *  Matrice creuse à 3 bandes
- *  (pour la ligne i, seules les colonnes i-1, i et i+1 sont non nulles)
+ * Matrice
  */
-struct matrix3b_s
-{
-  int N;          /* Matrice de dimension NxN */
-
-  /* Pour la ligne i, 
-   * A(i, i-1) = bnd[0][i]
-   * A(i, i)   = bnd[1][i]
-   * A(i, i+1) = bnd[2][i]
-   * Tous les elements sur les colonnes autres que i-1, i et i+1 sont nuls
-   */
-  double *bnd[3];
-};
-typedef struct matrix3b_s matrix3b_t;
-
 void linear_system_alloc_and_init(mpi_decomp_t *mpi_info, matrix3b_t *A, vector_t *vb)
 {
   int N = mpi_info->mpi_nloc;
@@ -208,7 +236,7 @@ void linear_system_free(matrix3b_t *A, vector_t *vb)
  * Produit Matrice-Vecteur
  *  " vy = A.vx  "
  */
-void prod_mat_vec(thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t *vx)
+void prod_mat_vec(mpi_decomp_t *mpi_info, thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t *vx)
 {
   assert(A->N == vx->N);
   assert(vy->N == vx->N);
@@ -235,9 +263,9 @@ void prod_mat_vec(thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t 
             A->bnd[2][i] * vx->elt[i+1];
         }
     }
-  else if (mpi_info->mpi_rank == mpi_info->mpi_size - 1)
+  else if (mpi_info->mpi_rank == mpi_info->mpi_nproc - 1)
     {
-      if (thr_info->thr_rank == thr_info->nthreads - 1)
+      if (thr_info->thr_rank == thr_info->thr_nthreads - 1)
         {
           /* cas i = N-1 */
           i = A->N-1;
@@ -257,53 +285,32 @@ void prod_mat_vec(thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t 
     }
   else
     {
-      
-    }
-  /* cas i = 0 */
-  i = 0;
-  vy->elt[i] = 
-    A->bnd[1][i] * vx->elt[i] + 
-    A->bnd[2][i] * vx->elt[i+1];
-
-  /* cas i = N-1 */
-  i = A->N-1;
-  vy->elt[i] = 
-    A->bnd[0][i] * vx->elt[i-1] + 
-    A->bnd[1][i] * vx->elt[i];
-
-  /* Coeur de la matrice */
-  for(i = 1 ; i < A->N-1 ; i++)
-    {
-      vy->elt[i] = 
-        A->bnd[0][i] * vx->elt[i-1] + 
-        A->bnd[1][i] * vx->elt[i] + 
-        A->bnd[2][i] * vx->elt[i+1];
+      /* Coeur de la matrice */
+      for(i = 0 ; i < A->N ; i++)
+        {
+          vy->elt[i] = 
+            A->bnd[0][i] * vx->elt[i-1] + 
+            A->bnd[1][i] * vx->elt[i] + 
+            A->bnd[2][i] * vx->elt[i+1];
+        }
     }
 }
-
-#define NUM_WORKERS 4
-
-typedef struct args_s
-{
-  mpi_decomp_t *mpi_info;
-  thr_decomp_t *thr_info;
-  matrix3b_t *A;
-  vector_t *vb;
-  vector_t *vx;
-} args_t;
 
 /*
  * Algorithme du Gradient Conjugue'
  *   " Resoud le systeme A.vx = vb "
  */
-void *gradient_conjugue(void *args_void)
+void *gradient_conjugue(void *args)
 {
   // Recup input
-  args_t *args = (args_t *)args_void;
-  thr_decomp_t *thr_info = args->thr_info;
-  matrix3b_t *A = args->A;
-  vector_t *vx = args->vx;
-  vector_t *vb = args->vb;
+  hybrid_t *hybrid = (hybrid_t *)args;
+  mpi_decomp_t *mpi_info = hybrid->mpi_info;
+  thr_decomp_t *thr_info = hybrid->thr_info;
+  shared_reduc_t *shr_reduc_info = hybrid->shr_reduc_info;
+  shared_exchg_t *shr_exchg_info = hybrid->shr_exchg_info;
+  matrix3b_t *A = hybrid->A;
+  vector_t *vx = hybrid->vx;
+  vector_t *vb = hybrid->vb;
   
   vector_t vg, vh, vw;
   double sn, sn1, sr, sg, seps;
@@ -324,21 +331,21 @@ void *gradient_conjugue(void *args_void)
   vector_init_0(thr_info, vx);
   vector_affect_mul_scal(thr_info, &vg, -1., vb);
   vector_affect_mul_scal(thr_info, &vh, -1., &vg);
-  sn = vector_norm2(thr_info, &vg);
+  sn = vector_norm2(hybrid, &vg);
 
   /* Phase iterative de l'algo */
 
   for(k = 0 ; k < N && sn > seps ; k++)
     {
       printf("Iteration %5d, err = %.4e\n", k, sn);
-      prod_mat_vec(thr_info, &vw, A, &vh);
+      prod_mat_vec(mpi_info, thr_info, &vw, A, &vh);
 
       sr = - div_bi_prod_scal(thr_info, &vg, &vh, &vh, &vw);
 
       vector_add_mul_scal(thr_info, vx, sr, &vh);
       vector_add_mul_scal(thr_info, &vg, sr, &vw);
 
-      sn1 = vector_norm2(thr_info, &vg);
+      sn1 = vector_norm2(hybrid, &vg);
 
       sg = sn1 / sn;
       sn = sn1;
@@ -356,14 +363,17 @@ void *gradient_conjugue(void *args_void)
 /* Verification du resultat
  *  A.vx "doit etre proche" de vb
  */
-void *verif_sol(void *args_void)
+void *verif_sol(void *args)
 {
   // Recup input
-  args_t *args = (args_t *)args_void;
-  thr_decomp_t *thr_info = args->thr_info;
-  matrix3b_t *A = args->A;
-  vector_t *vx = args->vx;
-  vector_t *vb = args->vb;
+  hybrid_t *hybrid = (hybrid_t *)args;
+  mpi_decomp_t *mpi_info = hybrid->mpi_info;
+  thr_decomp_t *thr_info = hybrid->thr_info;
+  shared_reduc_t *shr_reduc_info = hybrid->shr_reduc_info;
+  shared_exchg_t *shr_exchg_info = hybrid->shr_exchg_info;
+  matrix3b_t *A = hybrid->A;
+  vector_t *vx = hybrid->vx;
+  vector_t *vb = hybrid->vb;
 
   vector_t vb_cal;
   double norm2;
@@ -373,9 +383,9 @@ void *verif_sol(void *args_void)
 
   vector_alloc(A->N, &vb_cal);
 
-  prod_mat_vec(thr_info, &vb_cal, A, vx); /* vb_cal = A.vx */
+  prod_mat_vec(mpi_info, thr_info, &vb_cal, A, vx); /* vb_cal = A.vx */
   vector_add_mul_scal(thr_info, &vb_cal, -1., vb); /* vb_cal = vb_cal - vb */
-  norm2 = vector_norm2(thr_info, &vb_cal);
+  norm2 = vector_norm2(hybrid, &vb_cal);
 
   if (norm2 < 1.e-12)
     {
@@ -404,10 +414,11 @@ int main(int argc, char **argv)
   // Hybrid
   mpi_decomp_t mpi_info;
   thr_decomp_t thr_info[NUM_WORKERS];
-  shared_reduc_t sh_red;
+  shared_reduc_t shr_reduc_info;
+  shared_exchg_t shr_exchg_info;
 
   // Thread
-  args_t args[NUM_WORKERS];
+  hybrid_t hybrid[NUM_WORKERS];
   pthread_t pth[NUM_WORKERS];
   
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &mpi_thread_provided);
@@ -440,9 +451,8 @@ int main(int argc, char **argv)
     N = atoi(argv[1]);
 
     mpi_decomp_init(N, &mpi_info);
-
-
-    shared_reduc_init(&sh_red, NUM_WORKERS, 2); /* 2 = deux valeurs a reduire */
+    shared_reduc_init(&shr_reduc_info, NUM_WORKERS, 1);
+    shared_exchg_init(&shr_exchg_info, NUM_WORKERS);
 
     /* Allocation et construction du systeme lineaire
      */
@@ -458,13 +468,15 @@ int main(int argc, char **argv)
       {
         thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &(thr_info[i]));
 
-        args[i].mpi_info = &mpi_info;
-        args[i].thr_info = &(thr_info[i]);
-        args[i].A = &A;
-        args[i].vx = &vx;
-        args[i].vb = &vb;
+        hybrid[i].mpi_info = &mpi_info;
+        hybrid[i].thr_info = &(thr_info[i]);
+        hybrid[i].shr_reduc_info = &shr_reduc_info;
+        hybrid[i].shr_exchg_info = &shr_exchg_info;
+        hybrid[i].A = &A;
+        hybrid[i].vx = &vx;
+        hybrid[i].vb = &vb;
 
-        pthread_create(pth + i, NULL, gradient_conjugue, &(args[i]));
+        pthread_create(pth + i, NULL, gradient_conjugue, &(hybrid[i]));
       }
 
     
@@ -481,13 +493,15 @@ int main(int argc, char **argv)
       {
         thr_decomp_init(mpi_info.mpi_nloc, i, NUM_WORKERS, &(thr_info[i]));
 
-        args[i].mpi_info = &mpi_info;
-        args[i].thr_info = &(thr_info[i]);
-        args[i].A = &A;
-        args[i].vx = &vx;
-        args[i].vb = &vb;
+        hybrid[i].mpi_info = &mpi_info;
+        hybrid[i].thr_info = &(thr_info[i]);
+        hybrid[i].shr_reduc_info = &shr_reduc_info;
+        hybrid[i].shr_exchg_info = &shr_exchg_info;
+        hybrid[i].A = &A;
+        hybrid[i].vx = &vx;
+        hybrid[i].vb = &vb;
 
-        pthread_create(pth + i, NULL, verif_sol, &(args[i]));
+        pthread_create(pth + i, NULL, verif_sol, &(hybrid[i]));
       }
 
     
@@ -501,6 +515,9 @@ int main(int argc, char **argv)
      */
     linear_system_free(&A, &vb);
     vector_free(&vx);
+
+    shared_reduc_destroy(&shr_reduc_info);
+    shared_exchg_destroy(&shr_exchg_info);
   }
   MPI_Finalize();
 
