@@ -155,7 +155,7 @@ void vector_add_mul_scal(thr_decomp_t *thr_info, vector_t *vec_inout, double s, 
  * Retourne le rapport de 2 produits scalaires
  *  "  (v1.w1) / (v2.w2)  "
  */
-double div_bi_prod_scal(thr_decomp_t *thr_info, vector_t *v1, vector_t *w1, vector_t *v2, vector_t *w2)
+double div_bi_prod_scal(hybrid_t *hybrid, vector_t *v1, vector_t *w1, vector_t *v2, vector_t *w2)
 {
   int i;
 
@@ -163,18 +163,25 @@ double div_bi_prod_scal(thr_decomp_t *thr_info, vector_t *v1, vector_t *w1, vect
   assert(v1->N == v2->N);
   assert(v1->N == w2->N);
 
-  double scal1, scal2;
+  double scal1_local, scal2_local, scal1_global, scal2_global;
 
-  scal1 = 0.;
-  scal2 = 0.;
+  scal1_local = 0.;
+  scal1_global = 0.;
+  scal2_local = 0.;
+  scal2_global = 0.;
 
-  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
+  // Local redcution
+  for(i = hybrid->thr_info->thr_ideb; i < hybrid->thr_info->thr_ifin; i++)
     {
-      scal1 += v1->elt[i]*w1->elt[i];
-      scal2 += v2->elt[i]*w2->elt[i];
+      scal1_local += v1->elt[i]*w1->elt[i];
+      scal2_local += v2->elt[i]*w2->elt[i];
     }
 
-  return scal1/scal2;
+  // hybrid reduction
+  hyb_reduc_sum(&scal1_local, &scal1_global, hybrid->shr_reduc_info);
+  hyb_reduc_sum(&scal2_local, &scal2_global, hybrid->shr_reduc_info);
+
+  return scal1_global / scal2_global;
 }
 
 /*
@@ -241,9 +248,17 @@ void prod_mat_vec(hybrid_t *hybrid, vector_t *vy, matrix3b_t *A, vector_t *vx)
   assert(A->N == vx->N);
   assert(vy->N == vx->N);
 
+  // MPI exchange
+  double left = 0.0;
+  double right = 0.0;
+  hyb_exchg(vx->elt, hybrid->shr_exchg_info, &left, &right,
+            hybrid->mpi_info);
+
+  // Prod matrix x vector
   int i;
 
-  if (hybrid->mpi_info->mpi_rank == 0)
+  // Special case where we have 1 MPI process
+  if (hybrid->mpi_info->mpi_nproc == 1)
     {
       if (hybrid->thr_info->thr_rank == 0)
         {
@@ -252,48 +267,228 @@ void prod_mat_vec(hybrid_t *hybrid, vector_t *vy, matrix3b_t *A, vector_t *vx)
           vy->elt[i] = 
             A->bnd[1][i] * vx->elt[i] + 
             A->bnd[2][i] * vx->elt[i+1];
-        }
 
-      /* Coeur de la matrice */
-      for(i = 1 ; i < A->N-1 ; i++)
-        {
-          vy->elt[i] = 
-            A->bnd[0][i] * vx->elt[i-1] + 
-            A->bnd[1][i] * vx->elt[i] + 
-            A->bnd[2][i] * vx->elt[i+1];
+          /* Coeur de la matrice */
+          for(i = 1;
+              i < hybrid->thr_info->thr_ifin;
+              i++)
+            {
+              vy->elt[i] = 
+                A->bnd[0][i] * vx->elt[i-1] + 
+                A->bnd[1][i] * vx->elt[i] + 
+                A->bnd[2][i] * vx->elt[i+1];
+            }
         }
-    }
-  else if (hybrid->mpi_info->mpi_rank == hybrid->mpi_info->mpi_nproc - 1)
-    {
-      if (hybrid->thr_info->thr_rank == hybrid->thr_info->thr_nthreads - 1)
+      else if (hybrid->thr_info->thr_rank
+               == hybrid->thr_info->thr_nthreads - 1)
         {
           /* cas i = N-1 */
-          i = A->N-1;
+          i = hybrid->thr_info->thr_ifin - 1;
           vy->elt[i] = 
             A->bnd[0][i] * vx->elt[i-1] + 
             A->bnd[1][i] * vx->elt[i];
-        }
 
-      /* Coeur de la matrice */
-      for(i = 1 ; i < A->N-1 ; i++)
+          /* Coeur de la matrice */
+          for(i = hybrid->thr_info->thr_ideb;
+              i < hybrid->thr_info->thr_ifin - 1;
+              i++)
+            {
+              vy->elt[i] = 
+                A->bnd[0][i] * vx->elt[i-1] + 
+                A->bnd[1][i] * vx->elt[i] + 
+                A->bnd[2][i] * vx->elt[i+1];
+            }
+        }
+      else
         {
-          vy->elt[i] = 
-            A->bnd[0][i] * vx->elt[i-1] + 
-            A->bnd[1][i] * vx->elt[i] + 
-            A->bnd[2][i] * vx->elt[i+1];
+          /* Coeur de la matrice */
+          for(i = hybrid->thr_info->thr_ideb;
+              i < hybrid->thr_info->thr_ifin;
+              i++)
+            {
+              vy->elt[i] = 
+                A->bnd[0][i] * vx->elt[i-1] + 
+                A->bnd[1][i] * vx->elt[i] + 
+                A->bnd[2][i] * vx->elt[i+1];
+            }
         }
     }
-  else
+  else // We have multiple MPI process
     {
-      /* Coeur de la matrice */
-      for(i = 0 ; i < A->N ; i++)
+      // First MPI process
+      if (hybrid->mpi_info->mpi_rank == 0)
         {
-          vy->elt[i] = 
-            A->bnd[0][i] * vx->elt[i-1] + 
-            A->bnd[1][i] * vx->elt[i] + 
-            A->bnd[2][i] * vx->elt[i+1];
+          if (hybrid->thr_info->thr_rank == 0)
+            {
+              /* cas i = 0 */
+              i = 0;
+              vy->elt[i] = 
+                A->bnd[1][i] * vx->elt[i] + 
+                A->bnd[2][i] * vx->elt[i+1];
+
+              /* Coeur de la matrice */
+              for(i = 1;
+                  i < hybrid->thr_info->thr_ifin;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+          else if (hybrid->thr_info->thr_rank == hybrid->thr_info->thr_nthreads - 1)
+            {
+              /* cas i = N-1 */
+              i = hybrid->thr_info->thr_ifin - 1;
+              vy->elt[i] = 
+                A->bnd[0][i] * vx->elt[i-1] + 
+                A->bnd[1][i] * vx->elt[i] +
+                A->bnd[2][i] * right;
+
+              /* Coeur de la matrice */
+              for(i = hybrid->thr_info->thr_ideb;
+                  i < hybrid->thr_info->thr_ifin - 1;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+          else
+            {
+              /* Coeur de la matrice */
+              for(i = hybrid->thr_info->thr_ideb;
+                  i < hybrid->thr_info->thr_ifin;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+        }
+      // Last MPI process
+      else if (hybrid->mpi_info->mpi_rank == hybrid->mpi_info->mpi_nproc - 1)
+        {
+          if (hybrid->thr_info->thr_rank == hybrid->thr_info->thr_nthreads - 1)
+            {
+              /* cas i = N-1 */
+              i = hybrid->thr_info->thr_ifin - 1;
+              vy->elt[i] = 
+                A->bnd[0][i] * vx->elt[i-1] + 
+                A->bnd[1][i] * vx->elt[i];
+
+              /* Coeur de la matrice */
+              for(i = hybrid->thr_info->thr_ideb;
+                  i < hybrid->thr_info->thr_ifin - 1;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+          else if (hybrid->thr_info->thr_rank == 0)
+            {
+              /* cas i = 0 */
+              i = 0;
+              vy->elt[i] =
+                A->bnd[0][i] * left + 
+                A->bnd[1][i] * vx->elt[i] + 
+                A->bnd[2][i] * vx->elt[i+1];
+
+              /* Coeur de la matrice */
+              for(i = 1;
+                  i < hybrid->thr_info->thr_ifin;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+          else
+            {
+              /* Coeur de la matrice */
+              for(i = hybrid->thr_info->thr_ideb;
+                  i < hybrid->thr_info->thr_ifin;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+        }
+      // Middle MPI process
+      else
+        {
+          if (hybrid->thr_info->thr_rank == 0)
+            {
+              /* cas i = 0 */
+              i = 0;
+              vy->elt[i] =
+                A->bnd[0][i] * left + 
+                A->bnd[1][i] * vx->elt[i] + 
+                A->bnd[2][i] * vx->elt[i+1];
+
+              /* Coeur de la matrice */
+              for(i = 1;
+                  i < hybrid->thr_info->thr_ifin;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+          else if (hybrid->thr_info->thr_rank == hybrid->thr_info->thr_nthreads - 1)
+            {
+              /* cas i = N-1 */
+              i = hybrid->thr_info->thr_ifin - 1;
+              vy->elt[i] = 
+                A->bnd[0][i] * vx->elt[i-1] + 
+                A->bnd[1][i] * vx->elt[i] +
+                A->bnd[2][i] * right;
+
+              /* Coeur de la matrice */
+              for(i = hybrid->thr_info->thr_ideb;
+                  i < hybrid->thr_info->thr_ifin - 1;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
+          else
+            {
+              /* Coeur de la matrice */
+              for(i = hybrid->thr_info->thr_ideb;
+                  i < hybrid->thr_info->thr_ifin;
+                  i++)
+                {
+                  vy->elt[i] = 
+                    A->bnd[0][i] * vx->elt[i-1] + 
+                    A->bnd[1][i] * vx->elt[i] + 
+                    A->bnd[2][i] * vx->elt[i+1];
+                }
+            }
         }
     }
+
+  // Synchronize thread on all MPI process
+  pthread_barrier_wait(hybrid->shr_reduc_info->red_bar);
+  MPI_Barrier(MPI_COMM_WORLD);
 }
 
 /*
@@ -340,7 +535,7 @@ void *gradient_conjugue(void *args)
       printf("Iteration %5d, err = %.4e\n", k, sn);
       prod_mat_vec(hybrid, &vw, A, &vh);
 
-      sr = - div_bi_prod_scal(thr_info, &vg, &vh, &vh, &vw);
+      sr = - div_bi_prod_scal(hybrid, &vg, &vh, &vh, &vw);
 
       vector_add_mul_scal(thr_info, vx, sr, &vh);
       vector_add_mul_scal(thr_info, &vg, sr, &vw);
