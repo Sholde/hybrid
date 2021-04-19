@@ -236,16 +236,16 @@ void linear_system_free(matrix3b_t *A, vector_t *vb)
  * Produit Matrice-Vecteur
  *  " vy = A.vx  "
  */
-void prod_mat_vec(mpi_decomp_t *mpi_info, thr_decomp_t *thr_info, vector_t *vy, matrix3b_t *A, vector_t *vx)
+void prod_mat_vec(hybrid_t *hybrid, vector_t *vy, matrix3b_t *A, vector_t *vx)
 {
   assert(A->N == vx->N);
   assert(vy->N == vx->N);
 
   int i;
 
-  if (mpi_info->mpi_rank == 0)
+  if (hybrid->mpi_info->mpi_rank == 0)
     {
-      if (thr_info->thr_rank == 0)
+      if (hybrid->thr_info->thr_rank == 0)
         {
           /* cas i = 0 */
           i = 0;
@@ -263,9 +263,9 @@ void prod_mat_vec(mpi_decomp_t *mpi_info, thr_decomp_t *thr_info, vector_t *vy, 
             A->bnd[2][i] * vx->elt[i+1];
         }
     }
-  else if (mpi_info->mpi_rank == mpi_info->mpi_nproc - 1)
+  else if (hybrid->mpi_info->mpi_rank == hybrid->mpi_info->mpi_nproc - 1)
     {
-      if (thr_info->thr_rank == thr_info->thr_nthreads - 1)
+      if (hybrid->thr_info->thr_rank == hybrid->thr_info->thr_nthreads - 1)
         {
           /* cas i = N-1 */
           i = A->N-1;
@@ -338,7 +338,7 @@ void *gradient_conjugue(void *args)
   for(k = 0 ; k < N && sn > seps ; k++)
     {
       printf("Iteration %5d, err = %.4e\n", k, sn);
-      prod_mat_vec(mpi_info, thr_info, &vw, A, &vh);
+      prod_mat_vec(hybrid, &vw, A, &vh);
 
       sr = - div_bi_prod_scal(thr_info, &vg, &vh, &vh, &vw);
 
@@ -383,7 +383,7 @@ void *verif_sol(void *args)
 
   vector_alloc(A->N, &vb_cal);
 
-  prod_mat_vec(mpi_info, thr_info, &vb_cal, A, vx); /* vb_cal = A.vx */
+  prod_mat_vec(hybrid, &vb_cal, A, vx); /* vb_cal = A.vx */
   vector_add_mul_scal(thr_info, &vb_cal, -1., vb); /* vb_cal = vb_cal - vb */
   norm2 = vector_norm2(hybrid, &vb_cal);
 

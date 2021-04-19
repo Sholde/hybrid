@@ -105,6 +105,7 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
       // Recup in root processus the reduction of all others
       for (int i = 0; i < sh_red->nvals; i++)
         {
+          // Need to change with MPI_Reduc
           MPI_Gather(&(sh_red->red_val[i]), 1, MPI_DOUBLE, buff, 1, MPI_DOUBLE, root, MPI_COMM_WORLD);
 
           if (rank == root)
@@ -160,5 +161,15 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
     {
       sem_post(sh_red->sem);
     }
+
+  if (sh_red->terminate == sh_red->nthreads)
+    {
+      sh_red->set_master = 0;
+      sh_red->terminate = 0;
+    }
+
+  // Synchronize all thread of all MPI process
+  pthread_barrier_wait(sh_red->red_bar);
+  MPI_Barrier(MPI_COMM_WORLD);
 }
 
