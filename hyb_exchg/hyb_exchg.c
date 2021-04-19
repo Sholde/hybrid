@@ -119,7 +119,5 @@ void hyb_exchg(
       
       sem_post(&(sh_ex->sem));
     }
-
-  fprintf(stderr, "here\n");
 }
 
