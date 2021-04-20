@@ -1,6 +1,7 @@
 #include "hyb_exchg.h"
 #include <stdio.h>
 #include <mpi.h>
+#include <stdlib.h>
 
 /*
  * Initialisation/destruction d'une structure shared_exchg_t
@@ -16,14 +17,17 @@ void shared_exchg_init(shared_exchg_t *sh_ex, int nthreads)
   sh_ex->nthreads = nthreads;
 
   // Just wait after second sem_wait
-  sem_init(&(sh_ex->sem), 1, 1);
+  sh_ex->sem = malloc(sizeof(sem_t));
+  sem_init(sh_ex->sem, 1, 1);
   sh_ex->first = 1;
+  sh_ex->terminate = 0;
 }
 
 void shared_exchg_destroy(shared_exchg_t *sh_ex)
 {
   // Destroy the semaphore
-  sem_destroy(&(sh_ex->sem));
+  sem_destroy(sh_ex->sem);
+  free(sh_ex->sem);
 }
 
 
@@ -43,7 +47,7 @@ void hyb_exchg(
   /* Master thread election */
   /**************************/
 
-  sem_wait(&(sh_ex->sem));
+  sem_wait(sh_ex->sem);
 
   // You are the first thread, you will exchange with other first thread of mpi process
   if (sh_ex->first)
@@ -106,16 +110,10 @@ void hyb_exchg(
       
       *val_to_rcv_left = sh_ex->left;
       *val_to_rcv_right = sh_ex->right;
-      
-      // Unlock all threads waiting in sem_wait
-      for (int i = 1; i < mpi_decomp->mpi_nproc; i++)
-        {
-          sem_post(&(sh_ex->sem));
-        }
 
-      // Enable the next call
-      sh_ex->first = 1; // maybe need a mutex, because another thread can be not pass the if clause
-      sem_post(&(sh_ex->sem));
+      // Release next thread
+      sh_ex->terminate++;
+      sem_post(sh_ex->sem);
     }
   else // Not the first thread
     {
@@ -125,6 +123,17 @@ void hyb_exchg(
       
       *val_to_rcv_left = sh_ex->left;
       *val_to_rcv_right = sh_ex->right;
+
+      // Check if we are the last thread and re-init variable
+      sh_ex->terminate++;
+
+      if (sh_ex->terminate == sh_ex->nthreads)
+        {
+          sh_ex->first = 1;
+          sh_ex->terminate = 0;
+        }
+      
+      // Release next thread
+      sem_post(sh_ex->sem);      
     }
 }
-

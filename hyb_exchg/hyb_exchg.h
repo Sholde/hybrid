@@ -13,8 +13,9 @@ struct shared_exchg_s
 
   int nthreads;
 
-  sem_t sem;
+  sem_t *sem;
   int first;
+  int terminate;
 };
 typedef struct shared_exchg_s shared_exchg_t;
 
