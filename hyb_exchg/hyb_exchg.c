@@ -8,11 +8,11 @@
  */
 void shared_exchg_init(shared_exchg_t *sh_ex, int nthreads)
 {
-  //
+  // Init buffer value to store left and right
   sh_ex->left = 0.0;
   sh_ex->right = 0.0;
 
-  //
+  // Init the number of threads
   sh_ex->nthreads = nthreads;
 
   // Just wait after second sem_wait
@@ -22,6 +22,7 @@ void shared_exchg_init(shared_exchg_t *sh_ex, int nthreads)
 
 void shared_exchg_destroy(shared_exchg_t *sh_ex)
 {
+  // Destroy the semaphore
   sem_destroy(&(sh_ex->sem));
 }
 
@@ -44,6 +45,7 @@ void hyb_exchg(
 
   sem_wait(&(sh_ex->sem));
 
+  // You are the first thread, you will exchange with other first thread of mpi process
   if (sh_ex->first)
     {
       sh_ex->first = 0;
@@ -105,10 +107,17 @@ void hyb_exchg(
       *val_to_rcv_left = sh_ex->left;
       *val_to_rcv_right = sh_ex->right;
       
-      // Free one thread of sem_wait
+      // Unlock all threads waiting in sem_wait
+      for (int i = 1; i < mpi_decomp->mpi_nproc; i++)
+        {
+          sem_post(&(sh_ex->sem));
+        }
+
+      // Enable the next call
+      sh_ex->first = 1; // maybe need a mutex, because another thread can be not pass the if clause
       sem_post(&(sh_ex->sem));
     }
-  else
+  else // Not the first thread
     {
       /****************/
       /* Update value */
@@ -116,8 +125,6 @@ void hyb_exchg(
       
       *val_to_rcv_left = sh_ex->left;
       *val_to_rcv_right = sh_ex->right;
-      
-      sem_post(&(sh_ex->sem));
     }
 }
 
