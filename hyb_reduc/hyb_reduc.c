@@ -7,38 +7,44 @@
 
 void shared_reduc_init(shared_reduc_t *sh_red, int nthreads, int nvals)
 {
-  /* A COMPLETER */
+  // Init variable
   sh_red->nvals = nvals;
   sh_red->nthreads = nthreads;
 
+  // Init shared array
   sh_red->red_val = malloc(sizeof(double) * nvals);
   memset(sh_red->red_val, 0, sizeof(double) * nvals);
-  
+
+  // Init mutex
   sh_red->red_mut = malloc(sizeof(pthread_mutex_t));
   pthread_mutex_init(sh_red->red_mut, NULL);
 
+  // Init barrier
   sh_red->red_bar = malloc(sizeof(pthread_barrier_t));
   pthread_barrier_init(sh_red->red_bar, NULL, nthreads);
 
+  // Init semaphore
   sh_red->sem = malloc(sizeof(sem_t));
-  
-  sem_init(sh_red->sem, 0, 0);
-
+  sem_init(sh_red->sem, 0, 1);
   sh_red->terminate = 0;
   sh_red->set_master = 0;
 }
 
 void shared_reduc_destroy(shared_reduc_t *sh_red)
 {
-  /* A COMPLETER */
+  // Destroy semaphore
+  sem_destroy(sh_red->sem);
   free(sh_red->sem);
-  
+
+  // Destroy barrier
   pthread_barrier_destroy(sh_red->red_bar);
   free(sh_red->red_bar);
 
+  // Destroy mutex
   pthread_mutex_destroy(sh_red->red_mut);
   free(sh_red->red_mut);
 
+  // Release shared array
   free(sh_red->red_val);
 }
 
@@ -73,23 +79,17 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
   /* MPI Reduction */
   /*****************/
 
-  int is_master = 0;
-
-  pthread_mutex_lock(sh_red->red_mut);
-  {
-    if (sh_red->set_master == 0)
-      {
-        is_master = 1;
-        sh_red->set_master = 1;
-      }
-  }
-  pthread_mutex_unlock(sh_red->red_mut);
-
   // Waiting all thread for avoid mutex on all if and waiting all thread reduction
   pthread_barrier_wait(sh_red->red_bar);
+
+  // one thread can be execute the following code in same time
+  sem_wait(sh_red->sem);
   
-  if (is_master == 1) /* master thread */
+  if (sh_red->set_master == 0) /* master thread */
     {
+      // Set master
+      sh_red->set_master = 1;
+        
       // Recup MPI data
       int root = 0; // select process 0 to be root
         
@@ -127,7 +127,7 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
       /* Thread Update */
       /*****************/
 
-      // Don't need mutex because other thread are waiting (cf: else close)
+      // Don't need mutex because other thread are waiting (cf: else clause)
       for (int i = 0; i < sh_red->nvals; i++)
         {
           sh_red->red_val[i] = out[i];
@@ -137,9 +137,6 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
     }
   else
     {
-      // If not master thread, waiting master thread
-      sem_wait(sh_red->sem);
-
       /*****************/
       /* Thread Update */
       /*****************/
@@ -153,20 +150,20 @@ void hyb_reduc_sum(double *in, double *out, shared_reduc_t *sh_red)
       // Finish work
     }
 
-  // Finish work
+  /***************/
+  /* Finish Work */
+  /***************/
   sh_red->terminate += 1;
 
-  // Release semaphore only if we are not the last thread to finish work
-  if (sh_red->terminate != sh_red->nthreads)
-    {
-      sem_post(sh_red->sem);
-    }
-
+  // Re-init variable for the next call of the function
   if (sh_red->terminate == sh_red->nthreads)
     {
       sh_red->set_master = 0;
       sh_red->terminate = 0;
     }
+
+  // Release semaphore for the next thread
+  sem_post(sh_red->sem);
 
   // Synchronize all thread of all MPI process
   pthread_barrier_wait(sh_red->red_bar);
