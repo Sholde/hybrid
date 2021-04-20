@@ -72,11 +72,11 @@ void vector_free(vector_t *vec)
  * Initialise le vecteur à 0
  *   " vec = 0 "
  */
-void vector_init_0(thr_decomp_t *thr_info, vector_t *vec)
+void vector_init_0(hybrid_t *hybrid, vector_t *vec)
 {
   int i;
 
-  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
+  for(i = hybrid->thr_info->thr_ideb; i < hybrid->thr_info->thr_ifin; i++)
     {
       vec->elt[i] = 0.;
     }
@@ -86,11 +86,11 @@ void vector_init_0(thr_decomp_t *thr_info, vector_t *vec)
  * Multiplie tous les elements du vecteur par un scalaire
  *  " vec *= s "
  */
-void vector_mul_scal(thr_decomp_t *thr_info, vector_t *vec, double s)
+void vector_mul_scal(hybrid_t *hybrid, vector_t *vec, double s)
 {
   int i;
 
-  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
+  for(i = hybrid->thr_info->thr_ideb; i < hybrid->thr_info->thr_ifin; i++)
     {
       vec->elt[i] *= s;
     }
@@ -100,13 +100,13 @@ void vector_mul_scal(thr_decomp_t *thr_info, vector_t *vec, double s)
  * Affectation d'un vecteur par un autre multiplie' par un scalaire
  *  "  vec_out = s*vec_in  "
  */
-void vector_affect_mul_scal(thr_decomp_t *thr_info, vector_t *vec_out, double s, vector_t *vec_in)
+void vector_affect_mul_scal(hybrid_t *hybrid, vector_t *vec_out, double s, vector_t *vec_in)
 {
   int i;
 
   assert(vec_out->N == vec_in->N);
 
-  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
+  for(i = hybrid->thr_info->thr_ideb; i < hybrid->thr_info->thr_ifin; i++)
     {
       vec_out->elt[i] = s*vec_in->elt[i];
     }
@@ -139,13 +139,13 @@ double vector_norm2(hybrid_t *hybrid, vector_t *vec)
  * Additione à un vecteur un autre vecteur multiplie' par un scalaire
  *  " vec_inout += s*vec_in  "
  */
-void vector_add_mul_scal(thr_decomp_t *thr_info, vector_t *vec_inout, double s, vector_t *vec_in)
+void vector_add_mul_scal(hybrid_t *hybrid, vector_t *vec_inout, double s, vector_t *vec_in)
 {
   int i;
 
   assert(vec_inout->N == vec_in->N);
 
-  for(i = thr_info->thr_ideb; i < thr_info->thr_ifin; i++)
+  for(i = hybrid->thr_info->thr_ideb; i < hybrid->thr_info->thr_ifin; i++)
     {
       vec_inout->elt[i] += s*vec_in->elt[i];
     }
@@ -488,7 +488,7 @@ void prod_mat_vec(hybrid_t *hybrid, vector_t *vy, matrix3b_t *A, vector_t *vx)
 
   // Synchronize thread on all MPI process
   pthread_barrier_wait(hybrid->shr_reduc_info->red_bar);
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD); // take NUM_THREADS times (1 by threads of MPI process) 
 }
 
 /*
@@ -499,10 +499,7 @@ void *gradient_conjugue(void *args)
 {
   // Recup input
   hybrid_t *hybrid = (hybrid_t *)args;
-  mpi_decomp_t *mpi_info = hybrid->mpi_info;
-  thr_decomp_t *thr_info = hybrid->thr_info;
-  shared_reduc_t *shr_reduc_info = hybrid->shr_reduc_info;
-  shared_exchg_t *shr_exchg_info = hybrid->shr_exchg_info;
+
   matrix3b_t *A = hybrid->A;
   vector_t *vx = hybrid->vx;
   vector_t *vb = hybrid->vb;
@@ -523,9 +520,9 @@ void *gradient_conjugue(void *args)
 
   /* Initialisation de l'algo */
 
-  vector_init_0(thr_info, vx);
-  vector_affect_mul_scal(thr_info, &vg, -1., vb);
-  vector_affect_mul_scal(thr_info, &vh, -1., &vg);
+  vector_init_0(hybrid, vx);
+  vector_affect_mul_scal(hybrid, &vg, -1., vb);
+  vector_affect_mul_scal(hybrid, &vh, -1., &vg);
   sn = vector_norm2(hybrid, &vg);
 
   /* Phase iterative de l'algo */
@@ -537,17 +534,17 @@ void *gradient_conjugue(void *args)
 
       sr = - div_bi_prod_scal(hybrid, &vg, &vh, &vh, &vw);
 
-      vector_add_mul_scal(thr_info, vx, sr, &vh);
-      vector_add_mul_scal(thr_info, &vg, sr, &vw);
+      vector_add_mul_scal(hybrid, vx, sr, &vh);
+      vector_add_mul_scal(hybrid, &vg, sr, &vw);
 
       sn1 = vector_norm2(hybrid, &vg);
 
       sg = sn1 / sn;
       sn = sn1;
 
-      vector_mul_scal(thr_info, &vh, sg);
+      vector_mul_scal(hybrid, &vh, sg);
 
-      vector_add_mul_scal(thr_info, &vh, -1., &vg);
+      vector_add_mul_scal(hybrid, &vh, -1., &vg);
     }
 
   vector_free(&vg);
@@ -562,10 +559,7 @@ void *verif_sol(void *args)
 {
   // Recup input
   hybrid_t *hybrid = (hybrid_t *)args;
-  mpi_decomp_t *mpi_info = hybrid->mpi_info;
-  thr_decomp_t *thr_info = hybrid->thr_info;
-  shared_reduc_t *shr_reduc_info = hybrid->shr_reduc_info;
-  shared_exchg_t *shr_exchg_info = hybrid->shr_exchg_info;
+
   matrix3b_t *A = hybrid->A;
   vector_t *vx = hybrid->vx;
   vector_t *vb = hybrid->vb;
@@ -579,7 +573,7 @@ void *verif_sol(void *args)
   vector_alloc(A->N, &vb_cal);
 
   prod_mat_vec(hybrid, &vb_cal, A, vx); /* vb_cal = A.vx */
-  vector_add_mul_scal(thr_info, &vb_cal, -1., vb); /* vb_cal = vb_cal - vb */
+  vector_add_mul_scal(hybrid, &vb_cal, -1., vb); /* vb_cal = vb_cal - vb */
   norm2 = vector_norm2(hybrid, &vb_cal);
 
   if (norm2 < 1.e-12)
@@ -629,9 +623,11 @@ int main(int argc, char **argv)
         return 1;
       }
 
+    // Recup MPI variable
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    // Print error
     if (rank == 0)
       {
         // Check argument
@@ -642,9 +638,11 @@ int main(int argc, char **argv)
             abort();
           }
       }
-    
+
+    // Init the size
     N = atoi(argv[1]);
 
+    // Init hybrid structure
     mpi_decomp_init(N, &mpi_info);
     shared_reduc_init(&shr_reduc_info, NUM_WORKERS, 1);
     shared_exchg_init(&shr_exchg_info, NUM_WORKERS);
@@ -674,7 +672,7 @@ int main(int argc, char **argv)
         pthread_create(pth + i, NULL, gradient_conjugue, &(hybrid[i]));
       }
 
-    
+    // Waiting thread
     for (int i = 0; i < NUM_WORKERS; i++)
       {
         pthread_join(pth[i], NULL);
@@ -699,7 +697,8 @@ int main(int argc, char **argv)
         pthread_create(pth + i, NULL, verif_sol, &(hybrid[i]));
       }
 
-    
+
+    // Waiting thread
     for (int i = 0; i < NUM_WORKERS; i++)
       {
         pthread_join(pth[i], NULL);
@@ -711,6 +710,7 @@ int main(int argc, char **argv)
     linear_system_free(&A, &vb);
     vector_free(&vx);
 
+    // Destroy hybrid structure
     shared_reduc_destroy(&shr_reduc_info);
     shared_exchg_destroy(&shr_exchg_info);
   }
