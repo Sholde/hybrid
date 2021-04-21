@@ -99,10 +99,15 @@ conjugué* avec une implémentation *hybrid MPI / Pthread*.
    Le tableau partagé est bien sûr le *vecteur vx*, qui est décomponsé en
    plusieurs partie MPI / Pthread. Comme le montre le schéma suivant:
 
-   #+CAPTION: Schéma expliquant le partage du vecteur vx
-   #+NAME: fig:schema_expliquant_le_partage_du_vecteur_vx
+   #+CAPTION: Schéma expliquant les échanges
+   #+NAME: fig:schema_expliquant_les_echanges
    #+ATTR_LATEX: :width 300px
-   [[../ressources/hyb_grad_conj.png]]
+   [[../ressources/m.png]]
+
+   Ici nous avons 2 processus MPI (avec imaginons 2 threads chancun). Nous voyons
+   bien que pour faire le produit *matrice x vecteur* le premier processus a
+   besoin du premier élément du vecteur de 2 ème processus. Et inversement le 2
+   ème processus à besoin de la dernière valeur du vecteur du premier processus.
 
 * Conclusion
 
