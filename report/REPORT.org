@@ -80,7 +80,29 @@ conjugué* avec une implémentation *hybrid MPI / Pthread*.
 
 ** Produit matrice vecteur
 
-   A faire.
+   J'ai fait un cas spécial pour le cas où il n'y a qu'un processus MPI, car le
+   *i = 0 gloabal* est contenu par le premier thread et le *i = max_ite global*
+   est contenu par le dernier thread. Donc il n'y a pas d'échange à faire.
+
+   Sinon je sépare les cas:
+   - premier processus mpi
+   - dernier processus mpi
+   - autres processus mpi
+
+     
+   Car le dernier thread du premier processus échangera uniquement vers la
+   droite.
+   Le premier thread du dernier processus échangera uniquement vers la gauche.
+   Les autres processus échangeront à gauche avec leurs premier thread et avec
+   la droite avec leurs dernier thread.
+
+   Le tableau partagé est bien sûr le *vecteur vx*, qui est décomponsé en
+   plusieurs partie MPI / Pthread. Comme le montre le schéma suivant:
+
+   #+CAPTION: Schéma expliquant le partage du vecteur vx
+   #+NAME: fig:schema_expliquant_le_partage_du_vecteur_vx
+   #+ATTR_LATEX: :width 300px
+   [[../ressources/hyb_grad_conj.png]]
 
 * Conclusion
 
