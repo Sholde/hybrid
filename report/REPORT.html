@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2021-04-21 mer. 11:14 -->
+<!-- 2021-04-21 mer. 11:16 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Rapport du Projet Hybrid d'APP</title>
@@ -247,21 +247,21 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org73c5ecc">1. Réduction d'une somme hybride MPI / Pthread</a>
+<li><a href="#orgcd324ed">1. Réduction d'une somme hybride MPI / Pthread</a>
 <ul>
-<li><a href="#orgbee3e44">1.1. Schéma expliquant la démarche prise</a></li>
-<li><a href="#org4435bdc">1.2. Explication du code</a></li>
+<li><a href="#org593e0ca">1.1. Schéma expliquant la démarche prise</a></li>
+<li><a href="#org6dfd403">1.2. Explication du code</a></li>
 </ul>
 </li>
-<li><a href="#org803cbdd">2. Echange point à point hybrides MPI / Pthread</a></li>
-<li><a href="#org90e66ad">3. Algorithme du gradient conjugué parallèle MPI / Pthread</a>
+<li><a href="#org50165a2">2. Echange point à point hybrides MPI / Pthread</a></li>
+<li><a href="#orgea3cf58">3. Algorithme du gradient conjugué parallèle MPI / Pthread</a>
 <ul>
-<li><a href="#orgad09a8d">3.1. Initialisation</a></li>
-<li><a href="#orgf2f0bf4">3.2. Réduction</a></li>
-<li><a href="#org11b3028">3.3. Produit matrice vecteur</a></li>
+<li><a href="#orgb743a54">3.1. Initialisation</a></li>
+<li><a href="#org9190947">3.2. Réduction</a></li>
+<li><a href="#orgb88c85e">3.3. Produit matrice vecteur</a></li>
 </ul>
 </li>
-<li><a href="#org7d5b1f6">4. Conclusion</a></li>
+<li><a href="#org4e7b0e5">4. Conclusion</a></li>
 </ul>
 </div>
 </div>
@@ -270,15 +270,15 @@ Le but du projet était de paralléliser un programme séquentielle de <b>gradie
 conjugué</b> avec une implémentation <b>hybrid MPI / Pthread</b>.
 </p>
 
-<div id="outline-container-org73c5ecc" class="outline-2">
-<h2 id="org73c5ecc"><span class="section-number-2">1</span> Réduction d'une somme hybride MPI / Pthread</h2>
+<div id="outline-container-orgcd324ed" class="outline-2">
+<h2 id="orgcd324ed"><span class="section-number-2">1</span> Réduction d'une somme hybride MPI / Pthread</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-orgbee3e44" class="outline-3">
-<h3 id="orgbee3e44"><span class="section-number-3">1.1</span> Schéma expliquant la démarche prise</h3>
+<div id="outline-container-org593e0ca" class="outline-3">
+<h3 id="org593e0ca"><span class="section-number-3">1.1</span> Schéma expliquant la démarche prise</h3>
 <div class="outline-text-3" id="text-1-1">
 
-<div id="org8823a39" class="figure">
+<div id="org0358dfa" class="figure">
 <p><img src="../ressources/hyb_reduc.png" alt="hyb_reduc.png" />
 </p>
 <p><span class="figure-number">Figure 1: </span>Schéma expliquant la démarche prise</p>
@@ -286,8 +286,8 @@ conjugué</b> avec une implémentation <b>hybrid MPI / Pthread</b>.
 </div>
 </div>
 
-<div id="outline-container-org4435bdc" class="outline-3">
-<h3 id="org4435bdc"><span class="section-number-3">1.2</span> Explication du code</h3>
+<div id="outline-container-org6dfd403" class="outline-3">
+<h3 id="org6dfd403"><span class="section-number-3">1.2</span> Explication du code</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 Mon raisonnement est le suivant:
@@ -332,8 +332,8 @@ dans le <b>sem<sub>wait</sub></b> passe).
 </div>
 </div>
 
-<div id="outline-container-org803cbdd" class="outline-2">
-<h2 id="org803cbdd"><span class="section-number-2">2</span> Echange point à point hybrides MPI / Pthread</h2>
+<div id="outline-container-org50165a2" class="outline-2">
+<h2 id="org50165a2"><span class="section-number-2">2</span> Echange point à point hybrides MPI / Pthread</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 Pour ce qui est des échanges point à point, cela est relativement la même
@@ -355,12 +355,12 @@ pour le dernier thread.
 </div>
 </div>
 
-<div id="outline-container-org90e66ad" class="outline-2">
-<h2 id="org90e66ad"><span class="section-number-2">3</span> Algorithme du gradient conjugué parallèle MPI / Pthread</h2>
+<div id="outline-container-orgea3cf58" class="outline-2">
+<h2 id="orgea3cf58"><span class="section-number-2">3</span> Algorithme du gradient conjugué parallèle MPI / Pthread</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-orgad09a8d" class="outline-3">
-<h3 id="orgad09a8d"><span class="section-number-3">3.1</span> Initialisation</h3>
+<div id="outline-container-orgb743a54" class="outline-3">
+<h3 id="orgb743a54"><span class="section-number-3">3.1</span> Initialisation</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 La seule chose à prendre en considération c'est que c'est le premier thread
@@ -374,8 +374,8 @@ valeur <b>i global</b> égale à <b>i global maximum</b> du tableau.
 </div>
 </div>
 
-<div id="outline-container-orgf2f0bf4" class="outline-3">
-<h3 id="orgf2f0bf4"><span class="section-number-3">3.2</span> Réduction</h3>
+<div id="outline-container-org9190947" class="outline-3">
+<h3 id="org9190947"><span class="section-number-3">3.2</span> Réduction</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 Il y a 2 fonction qui font une réduction:
@@ -397,8 +397,8 @@ Donc pour ces 2 fonctions j'ai utilisé la fonction de réduction hybride.
 </div>
 </div>
 
-<div id="outline-container-org11b3028" class="outline-3">
-<h3 id="org11b3028"><span class="section-number-3">3.3</span> Produit matrice vecteur</h3>
+<div id="outline-container-orgb88c85e" class="outline-3">
+<h3 id="orgb88c85e"><span class="section-number-3">3.3</span> Produit matrice vecteur</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 J'ai fait un cas spécial pour le cas où il n'y a qu'un processus MPI, car le
@@ -430,8 +430,8 @@ plusieurs partie MPI / Pthread. Comme le montre le schéma suivant:
 </p>
 
 
-<div id="org6cd23fa" class="figure">
-<p><img src="../ressources/m.png" alt="m.png" />
+<div id="org64a43f6" class="figure">
+<p><img src="../ressources/matrice_vecteur.png" alt="matrice_vecteur.png" />
 </p>
 <p><span class="figure-number">Figure 2: </span>Schéma expliquant les échanges</p>
 </div>
@@ -446,8 +446,8 @@ besoin du premier élément du vecteur de 2 ème processus. Et inversement le 2
 </div>
 </div>
 
-<div id="outline-container-org7d5b1f6" class="outline-2">
-<h2 id="org7d5b1f6"><span class="section-number-2">4</span> Conclusion</h2>
+<div id="outline-container-org4e7b0e5" class="outline-2">
+<h2 id="org4e7b0e5"><span class="section-number-2">4</span> Conclusion</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 Comme vous allez le voir à l'exécution, mon implémentation donne un résultat
@@ -460,7 +460,7 @@ implémentation ou mon raisonnement je suis prenneur.
 <div id="postamble" class="status">
 <p class="date">Date: April 2021</p>
 <p class="author">Author: Bouton Nicolas</p>
-<p class="date">Created: 2021-04-21 mer. 11:14</p>
+<p class="date">Created: 2021-04-21 mer. 11:16</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

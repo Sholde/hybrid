@@ -102,7 +102,7 @@ conjugué* avec une implémentation *hybrid MPI / Pthread*.
    #+CAPTION: Schéma expliquant les échanges
    #+NAME: fig:schema_expliquant_les_echanges
    #+ATTR_LATEX: :width 300px
-   [[../ressources/m.png]]
+   [[../ressources/matrice_vecteur.png]]
 
    Ici nous avons 2 processus MPI (avec imaginons 2 threads chancun). Nous voyons
    bien que pour faire le produit *matrice x vecteur* le premier processus a

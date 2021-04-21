@@ -1,4 +1,4 @@
-% Created 2021-04-21 mer. 11:14
+% Created 2021-04-21 mer. 11:16
 % Intended LaTeX compiler: pdflatex
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
@@ -33,18 +33,18 @@ Le but du projet était de paralléliser un programme séquentielle de \textbf{g
 conjugué} avec une implémentation \textbf{hybrid MPI / Pthread}.
 
 \section{Réduction d'une somme hybride MPI / Pthread}
-\label{sec:orgc0f6afb}
+\label{sec:org486c6d1}
 \subsection{Schéma expliquant la démarche prise}
-\label{sec:orga4250a2}
+\label{sec:org6e86c79}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=300px]{../ressources/hyb_reduc.png}
-\caption{\label{fig:org64b4bbb}Schéma expliquant la démarche prise}
+\caption{\label{fig:orgb456a04}Schéma expliquant la démarche prise}
 \end{figure}
 
 \subsection{Explication du code}
-\label{sec:org7131080}
+\label{sec:org414739c}
 
 Mon raisonnement est le suivant:
 \begin{enumerate}
@@ -79,7 +79,7 @@ elles étaient initialisés pour le prochain tour de boucle. (je fais donc un
 dans le \textbf{sem\textsubscript{wait}} passe).
 
 \section{Echange point à point hybrides MPI / Pthread}
-\label{sec:orgc1ba1bb}
+\label{sec:orgc74b129}
 
 Pour ce qui est des échanges point à point, cela est relativement la même
 chose que pour la réduction. Il y 2 grandes parties:
@@ -94,9 +94,9 @@ pour le dernier thread.
 \end{enumerate}
 
 \section{Algorithme du gradient conjugué parallèle MPI / Pthread}
-\label{sec:org774a664}
+\label{sec:org53d1834}
 \subsection{Initialisation}
-\label{sec:org939b859}
+\label{sec:org4f74da0}
 
 La seule chose à prendre en considération c'est que c'est le premier thread
 du premier processus MPI qui contient la valeur du \textbf{i global} égale à \textbf{0}.
@@ -105,7 +105,7 @@ Et que c'est le dernier thread du dernier processus MPI qui contient la
 valeur \textbf{i global} égale à \textbf{i global maximum} du tableau.
 
 \subsection{Réduction}
-\label{sec:orgbcc62b7}
+\label{sec:org69736e1}
 
 Il y a 2 fonction qui font une réduction:
 \begin{itemize}
@@ -120,7 +120,7 @@ séquentielle et qui retourne un flottant.
 Donc pour ces 2 fonctions j'ai utilisé la fonction de réduction hybride.
 
 \subsection{Produit matrice vecteur}
-\label{sec:orgb18f4cb}
+\label{sec:org6c244d4}
 
 J'ai fait un cas spécial pour le cas où il n'y a qu'un processus MPI, car le
 \textbf{i = 0 gloabal} est contenu par le premier thread et le \textbf{i = max\textsubscript{ite} global}
@@ -145,8 +145,8 @@ plusieurs partie MPI / Pthread. Comme le montre le schéma suivant:
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=300px]{../ressources/m.png}
-\caption{\label{fig:org89da44d}Schéma expliquant les échanges}
+\includegraphics[width=300px]{../ressources/matrice_vecteur.png}
+\caption{\label{fig:org0fe142b}Schéma expliquant les échanges}
 \end{figure}
 
 Ici nous avons 2 processus MPI (avec imaginons 2 threads chancun). Nous voyons
@@ -155,7 +155,7 @@ besoin du premier élément du vecteur de 2 ème processus. Et inversement le 2
 ème processus à besoin de la dernière valeur du vecteur du premier processus.
 
 \section{Conclusion}
-\label{sec:org44e0783}
+\label{sec:org23769c0}
 
 Comme vous allez le voir à l'exécution, mon implémentation donne un résultat
 faux mais je ne comprends pas pourquoi. Si jamais vous avez un retour sur mon
