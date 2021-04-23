@@ -1,6 +1,7 @@
-% Created 2021-04-21 mer. 11:16
+% Created 2021-04-23 ven. 20:24
 % Intended LaTeX compiler: pdflatex
-\documentclass[11pt]{article}
+\documentclass[12pt, letterpaper]{article}
+         \usepackage[document]{ragged2e}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{graphicx}
@@ -29,22 +30,26 @@
 \maketitle
 \tableofcontents
 
+
+\section{Introduction}
+\label{sec:org650ad16}
+
 Le but du projet était de paralléliser un programme séquentielle de \textbf{gradient
 conjugué} avec une implémentation \textbf{hybrid MPI / Pthread}.
 
 \section{Réduction d'une somme hybride MPI / Pthread}
-\label{sec:org486c6d1}
+\label{sec:org623c687}
 \subsection{Schéma expliquant la démarche prise}
-\label{sec:org6e86c79}
+\label{sec:org3ae3fff}
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=300px]{../ressources/hyb_reduc.png}
-\caption{\label{fig:orgb456a04}Schéma expliquant la démarche prise}
+\includegraphics[width=400px]{../ressources/hyb_reduc.png}
+\caption{\label{fig:orgcaec86e}Schéma expliquant la démarche prise}
 \end{figure}
 
 \subsection{Explication du code}
-\label{sec:org414739c}
+\label{sec:org0f29d12}
 
 Mon raisonnement est le suivant:
 \begin{enumerate}
@@ -63,23 +68,23 @@ que les autres threads non élu actualisent leurs réductions.
 Pour ce faire j'ai utilisé un \textbf{sémaphore} pour pouvoir élire le premier
 thread qui arrive. Et à la fin pour l'actualisation du résultat on pourait
 lâcher tout les threads en faisant que le threads élu fasse une boucle de
-\textbf{sem\textsubscript{post}} mais je ne sais pas pourquoi ca ne marchais pas. Donc j'ai laisser
+\textbf{sem\_post} mais je ne sais pas pourquoi ca ne marchais pas. Donc j'ai laisser
 l'actualisation en séquentielle.
-
+\\
 A la fin de la fonction, j'ai mis une \textbf{barrière} pour pouvoir synchroniser
 tout les threads de tout les processus MPI, en mettant d'abord une barrier au
 niveau des threads du même processus pui une barrier entre touts les
-processus (qui est prise \textbf{NUM\textsubscript{THREADS}} fois car je ne sais pas trop comment
+processus (qui est prise \textbf{NUM\_THREADS} fois car je ne sais pas trop comment
 faire pour qu'un seul thread le fasse sachant que nous n'avons pas l'id du
 thread).
-
+\\
 Et j'ai aussi fait attention de remettre les variables de la structure comme
 elles étaient initialisés pour le prochain tour de boucle. (je fais donc un
-\textbf{sem\textsubscript{post}} pour le dernier threads afin que le premier thread qui arrrive
-dans le \textbf{sem\textsubscript{wait}} passe).
+\textbf{sem\_post} pour le dernier threads afin que le premier thread qui arrrive
+dans le \textbf{sem\_wait} passe).
 
 \section{Echange point à point hybrides MPI / Pthread}
-\label{sec:orgc74b129}
+\label{sec:org93e5055}
 
 Pour ce qui est des échanges point à point, cela est relativement la même
 chose que pour la réduction. Il y 2 grandes parties:
@@ -87,25 +92,25 @@ chose que pour la réduction. Il y 2 grandes parties:
 \item Echanges entre les threads élu des processus MPI (premier arrivé)
 \item Actualisation entre les threads du même processus MPI avec les valeurs que
 le thread élu à échangé.
-
+\\
 La aussi j'ai utilisé un \textbf{sémaphore} pour élire le premier thread. Et comme
 pour la réduction hybride j'ai fait attention à réinitialisé les variables
 pour le dernier thread.
 \end{enumerate}
 
 \section{Algorithme du gradient conjugué parallèle MPI / Pthread}
-\label{sec:org53d1834}
+\label{sec:org7486f6c}
 \subsection{Initialisation}
-\label{sec:org4f74da0}
+\label{sec:orgfdf8f41}
 
 La seule chose à prendre en considération c'est que c'est le premier thread
 du premier processus MPI qui contient la valeur du \textbf{i global} égale à \textbf{0}.
-
+\\
 Et que c'est le dernier thread du dernier processus MPI qui contient la
 valeur \textbf{i global} égale à \textbf{i global maximum} du tableau.
 
 \subsection{Réduction}
-\label{sec:org69736e1}
+\label{sec:org0b2467b}
 
 Il y a 2 fonction qui font une réduction:
 \begin{itemize}
@@ -116,14 +121,14 @@ Il y a 2 fonction qui font une réduction:
 
 En réalisté ce sont toutes les fonctions qui font une réduction en
 séquentielle et qui retourne un flottant.
-
+\\
 Donc pour ces 2 fonctions j'ai utilisé la fonction de réduction hybride.
 
 \subsection{Produit matrice vecteur}
-\label{sec:org6c244d4}
+\label{sec:org9ca3773}
 
 J'ai fait un cas spécial pour le cas où il n'y a qu'un processus MPI, car le
-\textbf{i = 0 gloabal} est contenu par le premier thread et le \textbf{i = max\textsubscript{ite} global}
+\textbf{i = 0 gloabal} est contenu par le premier thread et le \textbf{i = max\_ite global}
 est contenu par le dernier thread. Donc il n'y a pas d'échange à faire.
 
 Sinon je sépare les cas:
@@ -139,14 +144,14 @@ droite.
 Le premier thread du dernier processus échangera uniquement vers la gauche.
 Les autres processus échangeront à gauche avec leurs premier thread et avec
 la droite avec leurs dernier thread.
-
+\\
 Le tableau partagé est bien sûr le \textbf{vecteur vx}, qui est décomponsé en
 plusieurs partie MPI / Pthread. Comme le montre le schéma suivant:
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=300px]{../ressources/matrice_vecteur.png}
-\caption{\label{fig:org0fe142b}Schéma expliquant les échanges}
+\caption{\label{fig:orgc4768f4}Schéma expliquant les échanges}
 \end{figure}
 
 Ici nous avons 2 processus MPI (avec imaginons 2 threads chancun). Nous voyons
@@ -155,9 +160,10 @@ besoin du premier élément du vecteur de 2 ème processus. Et inversement le 2
 ème processus à besoin de la dernière valeur du vecteur du premier processus.
 
 \section{Conclusion}
-\label{sec:org23769c0}
+\label{sec:orgc1d6d1d}
 
 Comme vous allez le voir à l'exécution, mon implémentation donne un résultat
 faux mais je ne comprends pas pourquoi. Si jamais vous avez un retour sur mon
 implémentation ou mon raisonnement je suis prenneur.
+
 \end{document}

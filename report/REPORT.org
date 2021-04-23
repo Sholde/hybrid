@@ -2,15 +2,17 @@
 #+AUTHOR: Bouton Nicolas
 #+DATE: April 2021
 
-Le but du projet était de paralléliser un programme séquentielle de *gradient
-conjugué* avec une implémentation *hybrid MPI / Pthread*.
+* Introduction
+
+  Le but du projet était de paralléliser un programme séquentielle de *gradient
+  conjugué* avec une implémentation *hybrid MPI / Pthread*.
 
 * Réduction d'une somme hybride MPI / Pthread
 ** Schéma expliquant la démarche prise
 
    #+CAPTION: Schéma expliquant la démarche prise
    #+NAME: fig:schema_expliquant_la_demarche_prise
-   #+ATTR_LATEX: :width 300px
+   #+ATTR_LATEX: :width 400px
    [[../ressources/hyb_reduc.png]]
 
 ** Explication du code
